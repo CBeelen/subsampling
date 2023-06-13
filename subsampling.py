@@ -15,7 +15,7 @@ class SequenceList:
         self.sequences = []
         self.unique_counter = 0
         self.clone_counter = 0
-        self.distict_counter = 0
+        self.distinct_counter = 0
 
     def add_initial_sequence(self, clone_id, defect, frequency):
         if clone_id == 'unique':
@@ -28,12 +28,12 @@ class SequenceList:
             self.clone_counter += 1
         for i in range(0, frequency):
             self.sequences.append(Sequence(clone_id, defect))
-        self.distict_counter += 1
+        self.distinct_counter += 1
 
     def add_many_sequences(self, sequence_list):
         self.sequences = sequence_list
         distinct_sequences = {sequence.clone_id for sequence in sequence_list}
-        self.distict_counter = len(distinct_sequences)
+        self.distinct_counter = len(distinct_sequences)
         for clone_id in distinct_sequences:
             sequences_this_id = [sequence for sequence in sequence_list if sequence.clone_id == clone_id]
             if len(sequences_this_id) == 1:
@@ -43,8 +43,8 @@ class SequenceList:
                 self.clone_counter += 1
 
     def print_totals(self, defect):
-        print(f"Defect {defect}: total {len(self.sequences)}, "
-              f"distinct {self.distict_counter}, unique {self.unique_counter}, distinct clones {self.clone_counter}")
+        print(f"Defect {defect}: total {len(self.sequences)}, distinct {self.distinct_counter}, "
+              f"unique {self.unique_counter}, distinct clones {self.clone_counter}")
 
 
 def print_defect_stats(sequences):
@@ -62,8 +62,8 @@ def read_data(datafile):
     all_sequences = SequenceList()
     for row in reader:
         all_sequences.add_initial_sequence(clone_id=row['clonality'],
-                                   defect=row['genomicIntegrity'],
-                                   frequency=int(row['frequency']))
+                                           defect=row['genomicIntegrity'],
+                                           frequency=int(row['frequency']))
     return all_sequences
 
 
