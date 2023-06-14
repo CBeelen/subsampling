@@ -39,14 +39,16 @@ class SequenceList:
         self.sequences = sequence_list
         distinct_sequences = {sequence.clone_id for sequence in sequence_list}
         self.distinct_counter = len(distinct_sequences)
+        counted_clones = set()
         for clone_id in distinct_sequences:
             sequences_this_id = [sequence for sequence in sequence_list if sequence.clone_id == clone_id]
             clone_size = len(sequences_this_id)
             self.clone_sizes[clone_size] += 1
             if clone_size == 1:
                 self.unique_counter += 1
-            else:
+            elif clone_id not in counted_clones:
                 self.clone_counter += 1
+                counted_clones.add(clone_id)
 
     def print_totals(self, defect):
         print(f"Defect {defect}: total {len(self.sequences)}, distinct {self.distinct_counter}, "
