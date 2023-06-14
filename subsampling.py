@@ -1,5 +1,6 @@
 import csv
 from argparse import ArgumentParser
+from collections import defaultdict
 
 DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
 
@@ -16,6 +17,7 @@ class SequenceList:
         self.unique_counter = 0
         self.clone_counter = 0
         self.distinct_counter = 0
+        self.clone_sizes = defaultdict(lambda: 0)
 
     def add_initial_sequence(self, clone_id, defect, frequency):
         if clone_id == 'unique':
@@ -36,10 +38,11 @@ class SequenceList:
         self.distinct_counter = len(distinct_sequences)
         for clone_id in distinct_sequences:
             sequences_this_id = [sequence for sequence in sequence_list if sequence.clone_id == clone_id]
-            if len(sequences_this_id) == 1:
+            clone_size = len(sequences_this_id)
+            self.clone_sizes[clone_size] += 1
+            if clone_size == 1:
                 self.unique_counter += 1
             else:
-                # could do clone size stats here
                 self.clone_counter += 1
 
     def print_totals(self, defect):
@@ -47,14 +50,13 @@ class SequenceList:
               f"unique {self.unique_counter}, distinct clones {self.clone_counter}")
 
 
-def print_defect_stats(sequences):
-    for defect in DEFECTS_TO_INVESTIGATE:
-        sequences_this_defect = SequenceList()
-        sequences_this_defect.add_many_sequences([sequence for sequence in sequences if sequence.defect == defect])
-        other_sequences = SequenceList()
-        other_sequences.add_many_sequences([sequence for sequence in sequences if sequence.defect != defect])
-        sequences_this_defect.print_totals(defect)
-        other_sequences.print_totals(defect=f"NOT {defect}")
+def get_defect_stats(sequences, defect):
+    sequences_this_defect = SequenceList()
+    sequences_this_defect.add_many_sequences([sequence for sequence in sequences if sequence.defect == defect])
+    other_sequences = SequenceList()
+    other_sequences.add_many_sequences([sequence for sequence in sequences if sequence.defect != defect])
+    sequences_this_defect.print_totals(defect)
+    other_sequences.print_totals(defect=f"NOT {defect}")
 
 
 def read_data(datafile):
@@ -78,7 +80,8 @@ def main():
 
     all_sequences.print_totals(defect='ALL')
 
-    print_defect_stats(all_sequences.sequences)
+    for defect in DEFECTS_TO_INVESTIGATE:
+        get_defect_stats(all_sequences.sequences, defect)
 
 
 if __name__ == '__main__':
