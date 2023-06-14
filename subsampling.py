@@ -6,7 +6,6 @@ import random
 from scipy.stats import fisher_exact
 
 DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
-INVERT_TABLE = {'intact': False, '5defect': False, 'hypermutated': True}
 
 
 class Sequence:
@@ -89,10 +88,7 @@ def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
             sampled_sequences.add_many_sequences(sampled_seqs)
             sampled_unique = sampled_sequences.unique_counter
             sampled_clonal = sampled_sequences.clone_counter
-            if INVERT_TABLE[defect]:
-                table = [[defect_unique, sampled_unique], [defect_clonal, sampled_clonal]]
-            else:
-                table = [[defect_clonal, sampled_clonal], [defect_unique, sampled_unique]]
+            table = [[defect_clonal, sampled_clonal], [defect_unique, sampled_unique]]
             stats = fisher_exact(table)
             row = {"iteration": i+1,
                    "unique": sampled_unique,
