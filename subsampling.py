@@ -1,6 +1,9 @@
 import csv
 from argparse import ArgumentParser
 from collections import defaultdict
+import os
+import random
+from scipy.stats import fisher_exact
 
 DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
 
@@ -57,6 +60,7 @@ def get_defect_stats(sequences, defect):
     other_sequences.add_many_sequences([sequence for sequence in sequences if sequence.defect != defect])
     sequences_this_defect.print_totals(defect)
     other_sequences.print_totals(defect=f"NOT {defect}")
+    return sequences_this_defect, other_sequences
 
 
 def read_data(datafile):
@@ -69,11 +73,38 @@ def read_data(datafile):
     return all_sequences
 
 
+def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
+    """ Subsample sequences to the same depth as defect_seqs """
+    sampling_depth = len(defect_seqs.sequences)
+    defect_unique = defect_seqs.unique_counter
+    defect_clonal = defect_seqs.clone_counter
+    columns = ["iteration", "unique", "clones", "odds_ratio", "p_value"]
+    with open(os.path.join(outfolder, f"{defect}_subsampling.csv"), 'w') as outfile:
+        writer = csv.DictWriter(outfile, columns)
+        writer.writeheader()
+        for i in range(0, num_replicas):
+            sampled_seqs = random.choices(sequences.sequences, k=sampling_depth)
+            sampled_sequences = SequenceList()
+            sampled_sequences.add_many_sequences(sampled_seqs)
+            sampled_unique = sampled_sequences.unique_counter
+            sampled_clonal = sampled_sequences.clone_counter
+            table = [[defect_clonal, sampled_clonal], [defect_unique, sampled_unique]]
+            stats = fisher_exact(table)
+            row = {"iteration": i+1,
+                   "unique": sampled_unique,
+                   "clones": sampled_clonal,
+                   "odds_ratio": stats.statistic,
+                   "p_value": stats.pvalue}
+            writer.writerow(row)
+
+
 def main():
     parser = ArgumentParser()
     parser.add_argument('datafile', help='File containing the full set of data')
-    parser.add_argument('outfile', help='Output file to be written')
+    parser.add_argument('outfolder', help='Folder to write outputs to')
     args = parser.parse_args()
+
+    os.mkdir(args.outfolder)
 
     with open(args.datafile, 'r') as datafile:
         all_sequences = read_data(datafile)
@@ -81,7 +112,8 @@ def main():
     all_sequences.print_totals(defect='ALL')
 
     for defect in DEFECTS_TO_INVESTIGATE:
-        get_defect_stats(all_sequences.sequences, defect)
+        seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
+        do_subsampling(defect, seq_defect, seq_other, args.outfolder)
 
 
 if __name__ == '__main__':
