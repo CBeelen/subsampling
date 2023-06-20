@@ -116,6 +116,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('datafile', help='File containing the full set of data')
     parser.add_argument('outfolder', help='Folder to write outputs to')
+    parser.add_argument('-N', help='Number of replicas to sample', default=100)
     args = parser.parse_args()
 
     os.mkdir(args.outfolder)
@@ -127,7 +128,7 @@ def main():
 
     for defect in DEFECTS_TO_INVESTIGATE:
         seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
-        do_subsampling(defect, seq_defect, seq_other, args.outfolder)
+        do_subsampling(defect, seq_defect, seq_other, args.outfolder, int(args.N))
 
 
 if __name__ == '__main__':
