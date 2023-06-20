@@ -4,6 +4,7 @@ from collections import defaultdict
 import os
 import random
 from scipy.stats import fisher_exact
+from numpy import std
 
 DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
 
@@ -75,16 +76,29 @@ def read_data(datafile):
     return all_sequences
 
 
+def add_all_data(all_stats, num_unique, num_clonal, odds_ratio, p_value):
+    all_stats['unique'].append(num_unique)
+    all_stats['clonal'].append(num_clonal)
+    all_stats['odds_ratio'].append(odds_ratio)
+    all_stats['p_value'].append(p_value)
+
+
+def calculate_stats(all_stats):
+    means = []
+    standard_deviations = []
+    for entry in all_stats.values():
+        means.append(sum(entry)/len(entry))
+        standard_deviations.append(std(entry))
+    return means, standard_deviations
+
+
 def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
     """ Subsample sequences to the same depth as defect_seqs """
     sampling_depth = len(defect_seqs.sequences)
     defect_unique = defect_seqs.unique_counter
     defect_clonal = defect_seqs.clone_counter
     columns = ["iteration", "unique", "clones", "odds_ratio", "p_value"]
-    average_odds = 0
-    average_p_value = 0
-    average_unique = 0
-    average_clonal = 0
+    all_stats = defaultdict(lambda: [])
     with open(os.path.join(outfolder, f"{defect}_subsampling.csv"), 'w') as outfile:
         writer = csv.DictWriter(outfile, columns)
         writer.writeheader()
@@ -102,19 +116,19 @@ def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
                    "odds_ratio": stats.statistic,
                    "p_value": stats.pvalue}
             writer.writerow(row)
-            average_odds += stats.statistic
-            average_p_value += stats.pvalue
-            average_clonal += sampled_clonal
-            average_unique += sampled_unique
-        average_odds /= num_replicas
-        average_p_value /= num_replicas
-        average_unique /= num_replicas
-        average_clonal /= num_replicas
-        row = {"iteration": 'average',
-               "unique": average_unique,
-               "clones": average_clonal,
-               "odds_ratio": average_odds,
-               "p_value": average_p_value}
+            add_all_data(all_stats, sampled_unique, sampled_clonal, stats.statistic, stats.pvalue)
+        means, standard_deviations = calculate_stats(all_stats)
+        row = {"iteration": 'averages',
+               "unique": means[0],
+               "clones": means[1],
+               "odds_ratio": means[2],
+               "p_value": means[3]}
+        writer.writerow(row)
+        row = {"iteration": 'standard deviations',
+               "unique": standard_deviations[0],
+               "clones": standard_deviations[1],
+               "odds_ratio": standard_deviations[2],
+               "p_value": standard_deviations[3]}
         writer.writerow(row)
 
 
