@@ -83,6 +83,8 @@ def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
     columns = ["iteration", "unique", "clones", "odds_ratio", "p_value"]
     average_odds = 0
     average_p_value = 0
+    average_unique = 0
+    average_clonal = 0
     with open(os.path.join(outfolder, f"{defect}_subsampling.csv"), 'w') as outfile:
         writer = csv.DictWriter(outfile, columns)
         writer.writeheader()
@@ -102,11 +104,15 @@ def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
             writer.writerow(row)
             average_odds += stats.statistic
             average_p_value += stats.pvalue
+            average_clonal += sampled_clonal
+            average_unique += sampled_unique
         average_odds /= num_replicas
         average_p_value /= num_replicas
+        average_unique /= num_replicas
+        average_clonal /= num_replicas
         row = {"iteration": 'average',
-               "unique": 0,
-               "clones": 0,
+               "unique": average_unique,
+               "clones": average_clonal,
                "odds_ratio": average_odds,
                "p_value": average_p_value}
         writer.writerow(row)
