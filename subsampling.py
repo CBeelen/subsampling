@@ -52,8 +52,8 @@ class SequenceList:
                 self.clone_counter += 1
                 counted_clones.add(clone_id)
 
-    def print_totals(self, defect):
-        print(f"Defect {defect}: total {len(self.sequences)}, distinct {self.distinct_counter}, "
+    def print_totals(self, identifier):
+        print(f"{identifier}: total {len(self.sequences)}, distinct {self.distinct_counter}, "
               f"unique {self.unique_counter}, distinct clones {self.clone_counter}")
 
 
@@ -63,7 +63,7 @@ def get_defect_stats(sequences, defect):
     other_sequences = SequenceList()
     other_sequences.add_many_sequences([sequence for sequence in sequences if sequence.defect != defect])
     sequences_this_defect.print_totals(defect)
-    other_sequences.print_totals(defect=f"NOT {defect}")
+    other_sequences.print_totals(identifier=f"NOT {defect}")
     return sequences_this_defect, other_sequences
 
 
@@ -79,18 +79,12 @@ def read_data(datafile):
 
 def read_dates_data(datafile):
     reader = csv.DictReader(datafile)
-    all_sequences = []
-    current_person = '0'
+    all_sequences = defaultdict(lambda: SequenceList())
     for row in reader:
         person = row['comparison']
-        if person != current_person:
-            if current_person != "0":
-                all_sequences.append(current_sequences)
-            current_sequences = SequenceList()
-            current_person = person
-        current_sequences.add_initial_sequence(clone_id=row['clonality'],
-                                               defect=row['query'],
-                                               frequency=int(row['frequency']))
+        all_sequences[person].add_initial_sequence(clone_id=row['clonality'],
+                                                   defect=row['query'],
+                                                   frequency=int(row['frequency']))
     return all_sequences
 
 
@@ -154,7 +148,7 @@ def defect_based_subsampling(file, outfolder, N):
     with open(file, 'r') as datafile:
         all_sequences = read_data(datafile)
 
-    all_sequences.print_totals(defect='ALL')
+    all_sequences.print_totals(identifier='ALL')
 
     for defect in DEFECTS_TO_INVESTIGATE:
         seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
@@ -164,6 +158,10 @@ def defect_based_subsampling(file, outfolder, N):
 def date_based_subsampling(file, outfolder, N):
     with open(file, 'r') as datafile:
         all_sequences = read_dates_data(datafile)
+
+    for person, sequences in all_sequences.items():
+        sequences.print_totals(identifier=f'Person {person}')
+
 
 
 def main():
