@@ -73,9 +73,27 @@ class SequenceList:
         else:
             return dates[int(length/2)]
 
+    def get_median_date_of_distinct_sequences(self):
+        dates = self.get_dates()
+        dates.sort()
+        length = len(dates)
+        if len(dates) % 2 == 0:
+            left = dates[int(length/2)]  # python rounds down for 0.5
+            right = dates[int(length/2) + 1]
+            return date.fromordinal(int(left + (right - left)/2))
+        else:
+            return date.fromordinal(dates[int(length/2)])
+
     def get_dates(self):
-        dates = [sequence.date.toordinal() for sequence in self.sequences]
-        return list(set(dates))
+        sampled_ids = set()
+        dates = []
+        for sequence in self.sequences:
+            if sequence.clone_id in sampled_ids:
+                continue
+            else:
+                sampled_ids.add(sequence.clone_id)
+                dates.append(sequence.date.toordinal())
+        return dates
 
 
 def get_defect_stats(sequences, defect):
@@ -168,7 +186,8 @@ def do_subsampling(defect_seqs, sequences, outfile, num_replicas=100):
 def do_subsampling_dates(defect_seqs, sequences, outfile, num_replicas=100):
     """ Subsample sequences to the same depth of distinct sequences as defect_seqs """
     sampling_depth = defect_seqs.distinct_counter
-    sampled_median = defect_seqs.get_median_date()
+    print(f"Sampling to depth {sampling_depth}")
+    sampled_median = defect_seqs.get_median_date_of_distinct_sequences()
     sampled_dates = defect_seqs.get_dates()
     columns = ["iteration", "median date", "p_value"]
     writer = csv.DictWriter(outfile, columns)
@@ -184,10 +203,10 @@ def do_subsampling_dates(defect_seqs, sequences, outfile, num_replicas=100):
         subsampled_dates = sampled_sequences.get_dates()
         mann_whitney = mannwhitneyu(sampled_dates, subsampled_dates)
         row = {"iteration": i+1,
-               "median date": sampled_sequences.get_median_date(),
+               "median date": sampled_sequences.get_median_date_of_distinct_sequences(),
                "p_value": mann_whitney.pvalue}
         writer.writerow(row)
-        average_median_date += sampled_sequences.get_median_date().toordinal()
+        average_median_date += sampled_sequences.get_median_date_of_distinct_sequences().toordinal()
         average_p += mann_whitney.pvalue
     average_median_date = date.fromordinal(int(average_median_date/num_replicas))
     average_p /= num_replicas
