@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 import os
 import random
-from scipy.stats import fisher_exact
+from scipy.stats import fisher_exact, mannwhitneyu
 from numpy import std
 from datetime import date
 
@@ -72,6 +72,10 @@ class SequenceList:
             return left + (right - left)/2
         else:
             return dates[int(length/2)]
+
+    def get_dates(self):
+        dates = [sequence.date.toordinal() for sequence in self.sequences]
+        return list(set(dates))
 
 
 def get_defect_stats(sequences, defect):
@@ -164,19 +168,37 @@ def do_subsampling(defect_seqs, sequences, outfile, num_replicas=100):
 def do_subsampling_dates(defect_seqs, sequences, outfile, num_replicas=100):
     """ Subsample sequences to the same depth of distinct sequences as defect_seqs """
     sampling_depth = defect_seqs.distinct_counter
+    sampled_median = defect_seqs.get_median_date()
+    sampled_dates = defect_seqs.get_dates()
     columns = ["iteration", "median date", "p_value"]
     writer = csv.DictWriter(outfile, columns)
     writer.writeheader()
+    average_median_date = 0
+    average_p = 0
     for i in range(num_replicas):
         sampled_sequences = SequenceList()
         while sampled_sequences.distinct_counter < sampling_depth:
             number_missing = sampling_depth - sampled_sequences.distinct_counter
             new_seqs = random.choices(sequences.sequences, k=number_missing)
             sampled_sequences.add_many_sequences_to_existing(new_seqs)
+        subsampled_dates = sampled_sequences.get_dates()
+        mann_whitney = mannwhitneyu(sampled_dates, subsampled_dates)
         row = {"iteration": i+1,
                "median date": sampled_sequences.get_median_date(),
-               "p_value": 'y'}
+               "p_value": mann_whitney.pvalue}
         writer.writerow(row)
+        average_median_date += sampled_sequences.get_median_date().toordinal()
+        average_p += mann_whitney.pvalue
+    average_median_date = date.fromordinal(int(average_median_date/num_replicas))
+    average_p /= num_replicas
+    row = {'iteration': 'Average',
+           'median date': average_median_date,
+           'p_value': average_p}
+    writer.writerow(row)
+    row = {'iteration': 'Comparison group',
+           'median date': sampled_median,
+           'p_value': ''}
+    writer.writerow(row)
 
 
 def defect_based_subsampling(file, outfolder, N):
