@@ -84,7 +84,8 @@ def read_dates_data(datafile):
         person = row['comparison']
         all_sequences[person].add_initial_sequence(clone_id=row['clonality'],
                                                    defect=row['query'],
-                                                   frequency=int(row['frequency']))
+                                                   frequency=int(row['frequency']),
+                                                   date=row['date'])
     return all_sequences
 
 
@@ -161,6 +162,7 @@ def date_based_subsampling(file, outfolder, N):
 
     for person, sequences in all_sequences.items():
         sequences.print_totals(identifier=f'Person {person}')
+        seq_og, seq_subsample = get_defect_stats(sequences.sequences, '0')
 
 
 
