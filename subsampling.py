@@ -5,6 +5,7 @@ import os
 import random
 from scipy.stats import fisher_exact
 from numpy import std
+from datetime import date
 
 DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
 
@@ -52,9 +53,25 @@ class SequenceList:
                 self.clone_counter += 1
                 counted_clones.add(clone_id)
 
+    def add_many_sequences_to_existing(self, sequence_list):
+        self.sequences = self.sequences + sequence_list
+        distinct_sequences = {sequence.clone_id for sequence in self.sequences}
+        self.distinct_counter = len(distinct_sequences)
+
     def print_totals(self, identifier):
         print(f"{identifier}: total {len(self.sequences)}, distinct {self.distinct_counter}, "
               f"unique {self.unique_counter}, distinct clones {self.clone_counter}")
+
+    def get_median_date(self):
+        dates = [sequence.date for sequence in self.sequences]
+        dates.sort()
+        length = len(dates)
+        if len(dates) % 2 == 0:
+            left = dates[int(length/2)]  # python rounds down for 0.5
+            right = dates[int(length/2) + 1]
+            return left + (right - left)/2
+        else:
+            return dates[int(length/2)]
 
 
 def get_defect_stats(sequences, defect):
@@ -85,7 +102,7 @@ def read_dates_data(datafile):
         all_sequences[person].add_initial_sequence(clone_id=row['clonality'],
                                                    defect=row['query'],
                                                    frequency=int(row['frequency']),
-                                                   date=row['date'])
+                                                   date=date.fromisoformat(row['date']))
     return all_sequences
 
 
@@ -105,43 +122,60 @@ def calculate_stats(all_stats):
     return means, standard_deviations
 
 
-def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
+def do_subsampling(defect_seqs, sequences, outfile, num_replicas=100):
     """ Subsample sequences to the same depth as defect_seqs """
     sampling_depth = len(defect_seqs.sequences)
     defect_unique = defect_seqs.unique_counter
     defect_clonal = defect_seqs.clone_counter
     columns = ["iteration", "unique", "clones", "odds_ratio", "p_value"]
     all_stats = defaultdict(lambda: [])
-    with open(os.path.join(outfolder, f"{defect}_subsampling.csv"), 'w') as outfile:
-        writer = csv.DictWriter(outfile, columns)
-        writer.writeheader()
-        for i in range(0, num_replicas):
-            sampled_seqs = random.choices(sequences.sequences, k=sampling_depth)
-            sampled_sequences = SequenceList()
-            sampled_sequences.add_many_sequences(sampled_seqs)
-            sampled_unique = sampled_sequences.unique_counter
-            sampled_clonal = sampled_sequences.clone_counter
-            table = [[defect_clonal, sampled_clonal], [defect_unique, sampled_unique]]
-            stats = fisher_exact(table)
-            row = {"iteration": i+1,
-                   "unique": sampled_unique,
-                   "clones": sampled_clonal,
-                   "odds_ratio": stats.statistic,
-                   "p_value": stats.pvalue}
-            writer.writerow(row)
-            add_all_data(all_stats, sampled_unique, sampled_clonal, stats.statistic, stats.pvalue)
-        means, standard_deviations = calculate_stats(all_stats)
-        row = {"iteration": 'averages',
-               "unique": means[0],
-               "clones": means[1],
-               "odds_ratio": means[2],
-               "p_value": means[3]}
+    writer = csv.DictWriter(outfile, columns)
+    writer.writeheader()
+    for i in range(0, num_replicas):
+        sampled_seqs = random.choices(sequences.sequences, k=sampling_depth)
+        sampled_sequences = SequenceList()
+        sampled_sequences.add_many_sequences(sampled_seqs)
+        sampled_unique = sampled_sequences.unique_counter
+        sampled_clonal = sampled_sequences.clone_counter
+        table = [[defect_clonal, sampled_clonal], [defect_unique, sampled_unique]]
+        stats = fisher_exact(table)
+        row = {"iteration": i+1,
+               "unique": sampled_unique,
+               "clones": sampled_clonal,
+               "odds_ratio": stats.statistic,
+               "p_value": stats.pvalue}
         writer.writerow(row)
-        row = {"iteration": 'standard deviations',
-               "unique": standard_deviations[0],
-               "clones": standard_deviations[1],
-               "odds_ratio": standard_deviations[2],
-               "p_value": standard_deviations[3]}
+        add_all_data(all_stats, sampled_unique, sampled_clonal, stats.statistic, stats.pvalue)
+    means, standard_deviations = calculate_stats(all_stats)
+    row = {"iteration": 'averages',
+           "unique": means[0],
+           "clones": means[1],
+           "odds_ratio": means[2],
+           "p_value": means[3]}
+    writer.writerow(row)
+    row = {"iteration": 'standard deviations',
+           "unique": standard_deviations[0],
+           "clones": standard_deviations[1],
+           "odds_ratio": standard_deviations[2],
+           "p_value": standard_deviations[3]}
+    writer.writerow(row)
+
+
+def do_subsampling_dates(defect_seqs, sequences, outfile, num_replicas=100):
+    """ Subsample sequences to the same depth of distinct sequences as defect_seqs """
+    sampling_depth = defect_seqs.distinct_counter
+    columns = ["iteration", "median date", "p_value"]
+    writer = csv.DictWriter(outfile, columns)
+    writer.writeheader()
+    for i in range(num_replicas):
+        sampled_sequences = SequenceList()
+        while sampled_sequences.distinct_counter < sampling_depth:
+            number_missing = sampling_depth - sampled_sequences.distinct_counter
+            new_seqs = random.choices(sequences.sequences, k=number_missing)
+            sampled_sequences.add_many_sequences_to_existing(new_seqs)
+        row = {"iteration": i+1,
+               "median date": sampled_sequences.get_median_date(),
+               "p_value": 'y'}
         writer.writerow(row)
 
 
@@ -153,7 +187,8 @@ def defect_based_subsampling(file, outfolder, N):
 
     for defect in DEFECTS_TO_INVESTIGATE:
         seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
-        do_subsampling(defect, seq_defect, seq_other, outfolder, N)
+        with open(os.path.join(outfolder, f"{defect}_subsampling.csv"), 'w') as outfile:
+            do_subsampling(seq_defect, seq_other, outfile, N)
 
 
 def date_based_subsampling(file, outfolder, N):
@@ -163,6 +198,8 @@ def date_based_subsampling(file, outfolder, N):
     for person, sequences in all_sequences.items():
         sequences.print_totals(identifier=f'Person {person}')
         seq_og, seq_subsample = get_defect_stats(sequences.sequences, '0')
+        with open(os.path.join(outfolder, f"person_{person}_subsampling.csv"), 'w') as outfile:
+            do_subsampling_dates(seq_og, seq_subsample, outfile, N)
 
 
 
