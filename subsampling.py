@@ -10,9 +10,10 @@ DEFECTS_TO_INVESTIGATE = ['intact', '5defect', 'hypermutated']
 
 
 class Sequence:
-    def __init__(self, clone_id, defect):
+    def __init__(self, clone_id, defect, date=None):
         self.clone_id = clone_id
         self.defect = defect
+        self.date = date
 
 
 class SequenceList:
@@ -23,7 +24,7 @@ class SequenceList:
         self.distinct_counter = 0
         self.clone_sizes = defaultdict(lambda: 0)
 
-    def add_initial_sequence(self, clone_id, defect, frequency):
+    def add_initial_sequence(self, clone_id, defect, frequency, date=None):
         if clone_id == 'unique':
             clone_id = 'unique' + str(self.unique_counter)
             self.unique_counter += 1
@@ -33,7 +34,7 @@ class SequenceList:
             assert clone_id not in [sequence.clone_id for sequence in self.sequences]
             self.clone_counter += 1
         for i in range(0, frequency):
-            self.sequences.append(Sequence(clone_id, defect))
+            self.sequences.append(Sequence(clone_id, defect, date))
         self.distinct_counter += 1
 
     def add_many_sequences(self, sequence_list):
@@ -73,6 +74,23 @@ def read_data(datafile):
         all_sequences.add_initial_sequence(clone_id=row['clonality'],
                                            defect=row['genomicIntegrity'],
                                            frequency=int(row['frequency']))
+    return all_sequences
+
+
+def read_dates_data(datafile):
+    reader = csv.DictReader(datafile)
+    all_sequences = []
+    current_person = '0'
+    for row in reader:
+        person = row['comparison']
+        if person != current_person:
+            if current_person != "0":
+                all_sequences.append(current_sequences)
+            current_sequences = SequenceList()
+            current_person = person
+        current_sequences.add_initial_sequence(clone_id=row['clonality'],
+                                               defect=row['query'],
+                                               frequency=int(row['frequency']))
     return all_sequences
 
 
@@ -132,8 +150,25 @@ def do_subsampling(defect, defect_seqs, sequences, outfolder, num_replicas=100):
         writer.writerow(row)
 
 
+def defect_based_subsampling(file, outfolder, N):
+    with open(file, 'r') as datafile:
+        all_sequences = read_data(datafile)
+
+    all_sequences.print_totals(defect='ALL')
+
+    for defect in DEFECTS_TO_INVESTIGATE:
+        seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
+        do_subsampling(defect, seq_defect, seq_other, outfolder, N)
+
+
+def date_based_subsampling(file, outfolder, N):
+    with open(file, 'r') as datafile:
+        all_sequences = read_dates_data(datafile)
+
+
 def main():
     parser = ArgumentParser()
+    parser.add_argument('mode', choices=['defect', 'dates'], help='Choose what to subsample from, dates or defect')
     parser.add_argument('datafile', help='File containing the full set of data')
     parser.add_argument('outfolder', help='Folder to write outputs to')
     parser.add_argument('-N', help='Number of replicas to sample', default=100)
@@ -141,14 +176,10 @@ def main():
 
     os.mkdir(args.outfolder)
 
-    with open(args.datafile, 'r') as datafile:
-        all_sequences = read_data(datafile)
-
-    all_sequences.print_totals(defect='ALL')
-
-    for defect in DEFECTS_TO_INVESTIGATE:
-        seq_defect, seq_other = get_defect_stats(all_sequences.sequences, defect)
-        do_subsampling(defect, seq_defect, seq_other, args.outfolder, int(args.N))
+    if args.mode == 'defect':
+        defect_based_subsampling(args.datafile, args.outfolder, int(args.N))
+    elif args.mode == 'dates':
+        date_based_subsampling(args.datafile, args.outfolder, int(args.N))
 
 
 if __name__ == '__main__':
